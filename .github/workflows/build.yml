@@ -5,6 +5,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Unpack project zip
+        run: |
+          unzip -oq BR_Graphics_project_*.zip
+          rm -rf brgfx/.github
+          cp -r brgfx/. .
       - name: Show repo files
         run: |
           ls -la
