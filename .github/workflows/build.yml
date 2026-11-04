@@ -19,15 +19,21 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Unpack project archive
+      - name: Unpack project archive and locate source
         run: |
           unzip -o RageLauncher_step1.zip -d extracted_project
-          # Переходим в директорию с исходниками, если они были внутри подпапки архива
-          if [ -d "extracted_project/RageLauncher_step1" ]; then
-            cp -r extracted_project/RageLauncher_step1/* ./
+          
+          # Ищем папку, в которой лежит gradlew, и переносим её содержимое в корень
+          PROJECT_DIR=$(find extracted_project -name "gradlew" -exec dirname {} \;)
+          
+          if [ -n "$PROJECT_DIR" ]; then
+            echo "Found project at: $PROJECT_DIR"
+            cp -r "$PROJECT_DIR"/* ./
           else
-            cp -r extracted_project/* ./
+            echo "Error: gradlew not found in the archive!"
+            exit 1
           fi
+          
           chmod +x gradlew
 
       - name: Build APK with Gradle
