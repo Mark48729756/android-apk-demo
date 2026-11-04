@@ -1,0 +1,40 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Unpack project archive
+        run: |
+          unzip -o RageLauncher_step1.zip -d extracted_project
+          # Переходим в директорию с исходниками, если они были внутри подпапки архива
+          if [ -d "extracted_project/RageLauncher_step1" ]; then
+            cp -r extracted_project/RageLauncher_step1/* ./
+          else
+            cp -r extracted_project/* ./
+          fi
+          chmod +x gradlew
+
+      - name: Build APK with Gradle
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RageLauncher-debug.apk
+          path: app/build/outputs/apk/debug/app-debug.apk
