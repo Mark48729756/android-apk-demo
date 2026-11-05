@@ -30,16 +30,25 @@ jobs:
             unzip -o Veil_project_v0_6.zip -d extracted_project
           fi
 
-      - name: Auto-fix SettingsActivity Kotlin Error
+      - name: Auto-fix SettingsActivity Kotlin Error via Python
         run: |
-          FILE_PATH=$(find extracted_project -name "SettingsActivity.kt")
-          if [ -f "$FILE_PATH" ]; then
-            echo "Found SettingsActivity.kt at $FILE_PATH"
-            # Меняем val на var и гарантируем правильный тип Float на 135 строке
-            sed -i '135s/val /var /' "$FILE_PATH"
-            # Исправляем integer literal для Float (добавляем .0f или f к числу на 135 строке, если требуется)
-            sed -i '135s/\(= *[0-9]\+\)[^0-9.]/\1.0f/' "$FILE_PATH" || true
-          fi
+          python3 -c '
+          import glob
+          files = glob.glob("extracted_project/**/SettingsActivity.kt", recursive=True)
+          for path in files:
+              with open(path, "r", encoding="utf-8") as f:
+                  lines = f.readlines()
+              if len(lines) >= 135:
+                  # Смотрим, что на 135 строке (индекс 134), и меняем val на var либо фиксим присвоение
+                  line = lines[134]
+                  print(f"Original line 135: {line.strip()}")
+                  # Заменяем val на var и приводим к рабочему виду
+                  line = line.replace("val ", "var ")
+                  lines[134] = line
+                  print(f"Fixed line 135: {lines[134].strip()}")
+              with open(path, "w", encoding="utf-8") as f:
+                  f.writelines(lines)
+          '
 
       - name: Build Debug APK
         run: |
