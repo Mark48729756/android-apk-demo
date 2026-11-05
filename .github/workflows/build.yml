@@ -60,9 +60,18 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           }
+      - name: Подготовить APK
+        run: |
+          APK=$(find lawnchair-nightly/build/outputs/apk -name "*.apk" | head -n 1)
+          echo "Найден: $APK"
+          cp "$APK" Lumio.apk
+          ls -la Lumio.apk
       - name: Выложить APK в релиз
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          APK=$(find lawnchair-nightly/build/outputs/apk -name "*.apk" | head -n 1)
-          gh release upload src "$APK#Lumio.apk" -R ${{ github.repository }} --clobber
+        run: gh release upload src Lumio.apk -R ${{ github.repository }} --clobber
+      - name: Запасной вариант - APK как artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lumio-APK
+          path: Lumio.apk
