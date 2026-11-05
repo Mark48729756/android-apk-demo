@@ -1,4 +1,3 @@
-```yaml
 name: Veil Android Build
 
 on:
@@ -227,4 +226,3 @@ jobs:
             Veil-module.zip
           if-no-files-found: error
           retention-days: 14
-```
