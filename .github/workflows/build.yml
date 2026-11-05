@@ -40,18 +40,16 @@ jobs:
                   lines = f.readlines()
               if len(lines) >= 135:
                   idx = 134
-                  print(f"=== BEFORE LINE 135 ===")
-                  print(lines[idx].rstrip())
+                  print(f"ORIGINAL LINE 135: {repr(lines[idx])}")
                   
-                  # Меняем val на var независимо от пробелов
-                  lines[idx] = re.sub(r"\bval\s+", "var ", lines[idx])
+                  # 1. Меняем val на var
+                  lines[idx] = lines[idx].replace("val ", "var ")
                   
-                  # Исправляем integer literal на float (например, присваивание целого числа в float-переменную)
-                  # Ищем шаблон вроде "= 10" или "=10" и превращаем в "= 10.0f"
-                  lines[idx] = re.sub(r"=\s*([0-9]+)(\s*(?://.*|/\*.*|\)|$))", r"= \1.0f\2", lines[idx])
+                  # 2. Если в строке присваивается целое число там, где нужен Float, добавляем f
+                  # Ищем шаблоны вроде "= 0" или "= 10" и превращаем в "= 0f" / "= 10f"
+                  lines[idx] = re.sub(r"=\s*([0-9]+)(?!\.[0-9]|f|\w)", r"= \1f", lines[idx])
                   
-                  print(f"=== AFTER LINE 135 ===")
-                  print(lines[idx].rstrip())
+                  print(f"FIXED LINE 135: {repr(lines[idx])}")
                   
               with open(path, "w", encoding="utf-8") as f:
                   f.writelines(lines)
