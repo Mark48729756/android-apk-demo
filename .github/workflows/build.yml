@@ -22,6 +22,12 @@ jobs:
           git init -q
           git -c user.email=ci@lumio.local -c user.name=ci commit -q --allow-empty -m "Lumio build"
           git rev-parse --short=7 HEAD
+      - name: Убрать зависимость сборки от git
+        working-directory: lawnchair-nightly
+        run: |
+          perl -0pi -e 's/final def buildCommit = providers\.exec \{.*?\}\.standardOutput\.asText\.get\(\)\.trim\(\)/final def buildCommit = "local"/s' build.gradle
+          grep -n "buildCommit" build.gradle
+          if grep -q "providers.exec" build.gradle; then echo "git-вызов остался"; exit 1; fi
       - name: Ключ подписи
         working-directory: lawnchair-nightly
         run: |
@@ -39,6 +45,12 @@ jobs:
             grep -n -B3 -A30 "What went wrong" build.log | head -120
             echo "=============== последние 40 строк ==============="
             tail -n 40 build.log
+            {
+              echo '## Ошибка сборки'
+              echo '```'
+              grep -n -B3 -A25 "What went wrong" build.log | head -60
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           }
       - name: Выложить APK в релиз
