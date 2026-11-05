@@ -35,7 +35,10 @@ jobs:
           FILE_PATH=$(find extracted_project -name "SettingsActivity.kt")
           if [ -f "$FILE_PATH" ]; then
             echo "Found SettingsActivity.kt at $FILE_PATH"
+            # Меняем val на var и гарантируем правильный тип Float на 135 строке
             sed -i '135s/val /var /' "$FILE_PATH"
+            # Исправляем integer literal для Float (добавляем .0f или f к числу на 135 строке, если требуется)
+            sed -i '135s/\(= *[0-9]\+\)[^0-9.]/\1.0f/' "$FILE_PATH" || true
           fi
 
       - name: Build Debug APK
