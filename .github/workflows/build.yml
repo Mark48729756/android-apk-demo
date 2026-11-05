@@ -33,19 +33,26 @@ jobs:
       - name: Auto-fix SettingsActivity Kotlin Error via Python
         run: |
           python3 -c '
-          import glob
+          import glob, re
           files = glob.glob("extracted_project/**/SettingsActivity.kt", recursive=True)
           for path in files:
               with open(path, "r", encoding="utf-8") as f:
                   lines = f.readlines()
               if len(lines) >= 135:
-                  # Смотрим, что на 135 строке (индекс 134), и меняем val на var либо фиксим присвоение
-                  line = lines[134]
-                  print(f"Original line 135: {line.strip()}")
-                  # Заменяем val на var и приводим к рабочему виду
-                  line = line.replace("val ", "var ")
-                  lines[134] = line
-                  print(f"Fixed line 135: {lines[134].strip()}")
+                  idx = 134
+                  print(f"=== BEFORE LINE 135 ===")
+                  print(lines[idx].rstrip())
+                  
+                  # Меняем val на var независимо от пробелов
+                  lines[idx] = re.sub(r"\bval\s+", "var ", lines[idx])
+                  
+                  # Исправляем integer literal на float (например, присваивание целого числа в float-переменную)
+                  # Ищем шаблон вроде "= 10" или "=10" и превращаем в "= 10.0f"
+                  lines[idx] = re.sub(r"=\s*([0-9]+)(\s*(?://.*|/\*.*|\)|$))", r"= \1.0f\2", lines[idx])
+                  
+                  print(f"=== AFTER LINE 135 ===")
+                  print(lines[idx].rstrip())
+                  
               with open(path, "w", encoding="utf-8") as f:
                   f.writelines(lines)
           '
