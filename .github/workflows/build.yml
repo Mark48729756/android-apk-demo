@@ -16,6 +16,12 @@ jobs:
         run: |
           gh release download src -R ${{ github.repository }} -p "lawnchair-oneui-full.1.zip"
           unzip -q lawnchair-oneui-full.1.zip
+      - name: Git-репозиторий для сборки (build.gradle читает commit)
+        working-directory: lawnchair-nightly
+        run: |
+          git init -q
+          git -c user.email=ci@lumio.local -c user.name=ci commit -q --allow-empty -m "Lumio build"
+          git rev-parse --short=7 HEAD
       - name: Ключ подписи
         working-directory: lawnchair-nightly
         run: |
@@ -28,7 +34,13 @@ jobs:
         working-directory: lawnchair-nightly
         run: |
           chmod +x gradlew
-          ./gradlew assembleLawnWithQuickstepGithubRelease --no-daemon --stacktrace
+          ./gradlew assembleLawnWithQuickstepGithubRelease --no-daemon --console=plain > build.log 2>&1 || {
+            echo "=============== ОШИБКА (главное) ==============="
+            grep -n -B3 -A30 "What went wrong" build.log | head -120
+            echo "=============== последние 40 строк ==============="
+            tail -n 40 build.log
+            exit 1
+          }
       - name: Выложить APK в релиз
         env:
           GH_TOKEN: ${{ github.token }}
