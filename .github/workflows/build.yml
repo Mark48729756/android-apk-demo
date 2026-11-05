@@ -1,77 +1,18 @@
-name: Build Lumio
-on: workflow_dispatch
-permissions:
-  contents: write
+name: build
+on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with:
-          distribution: zulu
-          java-version: 21
-      - name: Скачать проект из релиза
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download src -R ${{ github.repository }} -p "lawnchair-oneui-full.1.zip"
-          unzip -q lawnchair-oneui-full.1.zip
-      - name: Git-репозиторий для сборки (build.gradle читает commit)
-        working-directory: lawnchair-nightly
-        run: |
-          git init -q
-          git -c user.email=ci@lumio.local -c user.name=ci commit -q --allow-empty -m "Lumio build"
-          git rev-parse --short=7 HEAD
-      - name: Убрать зависимость сборки от git
-        working-directory: lawnchair-nightly
-        run: |
-          perl -0pi -e 's/final def buildCommit = providers\.exec \{.*?\}\.standardOutput\.asText\.get\(\)\.trim\(\)/final def buildCommit = "local"/s' build.gradle
-          grep -n "buildCommit" build.gradle
-          if grep -q "providers.exec" build.gradle; then echo "git-вызов остался"; exit 1; fi
-      - name: Исправить маршрут Wallpapers (ошибка компиляции)
-        working-directory: lawnchair-nightly
-        run: |
-          F=lawnchair/src/app/lawnchair/ui/preferences/navigation/PreferenceRoutes.kt
-          sed -i 's/^data object Wallpapers : PreferenceRoute$/data object Wallpapers : PreferenceRootRoute/' $F
-          grep -n "object Wallpapers" $F
-          grep -q "object Wallpapers : PreferenceRootRoute" $F || { echo "правка не применилась"; exit 1; }
-      - name: Ключ подписи
-        working-directory: lawnchair-nightly
-        run: |
-          keytool -genkeypair -keystore lumio-release.jks -alias lumio -keyalg RSA -keysize 2048 -validity 36500 -storepass lumio2026 -keypass lumio2026 -dname "CN=Lumio Launcher, O=Lumio, C=KZ"
-          printf 'storeFile=lumio-release.jks\nstorePassword=lumio2026\nkeyAlias=lumio\nkeyPassword=lumio2026\n' > keystore.properties
-      - name: Принять лицензии Android SDK
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+        with: { distribution: temurin, java-version: 17 }
       - uses: gradle/actions/setup-gradle@v4
-      - name: Сборка
-        working-directory: lawnchair-nightly
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleLawnWithQuickstepGithubRelease --no-daemon --console=plain > build.log 2>&1 || {
-            echo "=============== ОШИБКА (главное) ==============="
-            grep -n -B3 -A30 "What went wrong" build.log | head -120
-            echo "=============== последние 40 строк ==============="
-            tail -n 40 build.log
-            {
-              echo '## Ошибка сборки'
-              echo '```'
-              grep -n -B3 -A25 "What went wrong" build.log | head -60
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          }
-      - name: Подготовить APK
-        run: |
-          APK=$(find lawnchair-nightly/build/outputs/apk -name "*.apk" | head -n 1)
-          echo "Найден: $APK"
-          cp "$APK" Lumio.apk
-          ls -la Lumio.apk
-      - name: Выложить APK в релиз
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload src Lumio.apk -R ${{ github.repository }} --clobber
-      - name: Запасной вариант - APK как artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Lumio-APK
-          path: Lumio.apk
+        with: { gradle-version: 8.7 }
+      - run: gradle assembleDebug --no-daemon
+      - run: |
+          mkdir -p module/system/app/DepthParallax
+          cp app/build/outputs/apk/debug/app-debug.apk module/system/app/DepthParallax/DepthParallax.apk
+          cd module && zip -r ../Veil.zip . -x '.*'
+      - uses: actions/upload-artifact@v4
+        with: { name: Veil-module, path: Veil.zip }
