@@ -24,22 +24,31 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Find Project Root and Build APK
+      - name: Build Debug APK
         run: |
-          # Ищем папку, где лежит settings.gradle.kts, так как файлы архива могли распаковаться внутрь подпапки
-          PROJECT_DIR=$(find . -name "settings.gradle.kts" -maxdepth 3 -exec dirname {} \;)
-          echo "Found project root at: $PROJECT_DIR"
+          # Выводим структуру, чтобы на 100% увидеть, куда распаковался архив
+          find . -maxdepth 3 -not -path '*/.*'
+          
+          # Находим точный путь к папке с settings.gradle.kts и переходим туда
+          PROJECT_DIR=$(find . -name "settings.gradle.kts" -maxdepth 3 -exec dirname {} \; | head -n 1)
+          echo "Target project dir: $PROJECT_DIR"
+          
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "Error: settings.gradle.kts not found!"
+            exit 1
+          fi
+          
           cd "$PROJECT_DIR"
           gradle :app:assembleDebug --no-daemon
 
       - name: Prepare Magisk Module and Pack ZIP
         run: |
-          PROJECT_DIR=$(find . -name "settings.gradle.kts" -maxdepth 3 -exec dirname {} \;)
+          PROJECT_DIR=$(find . -name "settings.gradle.kts" -maxdepth 3 -exec dirname {} \; | head -n 1)
           cd "$PROJECT_DIR"
           mkdir -p module/system/app/DepthParallax
           cp app/build/outputs/apk/debug/app-debug.apk module/system/app/DepthParallax/DepthParallax.apk
           cd module && zip -r ../Veil.zip . -x '.*'
-          mv ../Veil.zip ..
+          mv ../Veil.zip ../../..
 
       - uses: actions/upload-artifact@v4
         with:
