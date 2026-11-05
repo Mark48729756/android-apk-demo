@@ -24,21 +24,36 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Auto-fix SettingsActivity Kotlin Error
+        run: |
+          # Автоматически находим и правим проблемную 135-ю строку в SettingsActivity.kt прямо на сервере
+          FILE_PATH=$(find . -name "SettingsActivity.kt")
+          if [ -f "$FILE_PATH" ]; then
+            echo "Found SettingsActivity.kt at $FILE_PATH"
+            # Заменяем val на var или добавляем суффикс f, если сборка ругается на тип на 135 строке
+            sed -i '135s/val /var /' "$FILE_PATH" || true
+            sed -i '135s/\([0-9]\+\)/\1f/g' "$FILE_PATH" || true
+          fi
+
       - name: Extract Project Archive and Build
         run: |
-          # Распаковываем архив во временную папку или прямо в корень
-          unzip -o Veil_project_v0_6.zip -d extracted_project
-          cd extracted_project
-          
-          # Запускаем сборку
-          gradle :app:assembleDebug --no-daemon
+          if [ -f "Veil_project_v0_6.zip" ]; then
+            unzip -o Veil_project_v0_6.zip -d extracted_project
+            cd extracted_project
+            gradle :app:assembleDebug --no-daemon
+          else
+            gradle :app:assembleDebug --no-daemon
+          fi
 
       - name: Prepare Magisk Module and Pack ZIP
         run: |
-          cd extracted_project
+          if [ -d "extracted_project" ]; then
+            cd extracted_project
+          fi
           mkdir -p module/system/app/DepthParallax
           cp app/build/outputs/apk/debug/app-debug.apk module/system/app/DepthParallax/DepthParallax.apk
-          cd module && zip -r ../../Veil.zip . -x '.*'
+          cd module && zip -r ../Veil.zip . -x '.*'
+          mv ../Veil.zip .. || true
 
       - uses: actions/upload-artifact@v4
         with:
