@@ -40,17 +40,10 @@ jobs:
                   lines = f.readlines()
               if len(lines) >= 135:
                   idx = 134
-                  print(f"ORIGINAL LINE 135: {repr(lines[idx])}")
-                  
-                  # 1. Меняем val на var
-                  lines[idx] = lines[idx].replace("val ", "var ")
-                  
-                  # 2. Если в строке присваивается целое число там, где нужен Float, добавляем f
-                  # Ищем шаблоны вроде "= 0" или "= 10" и превращаем в "= 0f" / "= 10f"
-                  lines[idx] = re.sub(r"=\s*([0-9]+)(?!\.[0-9]|f|\w)", r"= \1f", lines[idx])
-                  
-                  print(f"FIXED LINE 135: {repr(lines[idx])}")
-                  
+                  print(f"ORIGINAL: {repr(lines[idx])}")
+                  # Надежная замена val на var через границу слова \b
+                  lines[idx] = re.sub(r"\bval\b", "var", lines[idx])
+                  print(f"FIXED:    {repr(lines[idx])}")
               with open(path, "w", encoding="utf-8") as f:
                   f.writelines(lines)
           '
