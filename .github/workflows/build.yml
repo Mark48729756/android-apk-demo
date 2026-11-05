@@ -25,7 +25,8 @@ jobs:
           gradle-version: '8.7'
 
       - name: Build Debug APK
-        run: gradle :app:assembleDebug --no-daemon
+        # Добавляем поиск gradle-файла в текущей директории через -b или переходим внутрь
+        run: gradle :app:assembleDebug --no-daemon -b build.gradle.kts
 
       - name: Prepare Magisk Module and Pack ZIP
         run: |
