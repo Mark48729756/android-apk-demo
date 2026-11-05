@@ -13,116 +13,141 @@ jobs:
   build:
     name: Build Veil APK and Module
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
 
     steps:
-      # 1. Download repository
+      # 1. Получаем репозиторий
       - name: Checkout source
         uses: actions/checkout@v4
 
-      # 2. Find actual Android project directory
-      - name: Detect project directory
+      # 2. Находим и распаковываем ZIP проекта
+      - name: Extract Veil project
         shell: bash
         run: |
           set -euo pipefail
 
+          cd "$GITHUB_WORKSPACE"
+
+          ARCHIVE=""
+
+          if [ -f "Veil_v1_4_Sharp_Preview.zip" ]; then
+            ARCHIVE="$GITHUB_WORKSPACE/Veil_v1_4_Sharp_Preview.zip"
+          else
+            mapfile -t ARCHIVES < <(
+              find "$GITHUB_WORKSPACE" \
+                -maxdepth 1 \
+                -type f \
+                -iname '*.zip' \
+                ! -name 'Veil-module.zip'
+            )
+
+            if [ "${#ARCHIVES[@]}" -ne 1 ]; then
+              echo "::error::Expected Veil_v1_4_Sharp_Preview.zip or exactly one project ZIP."
+              printf '%s\n' "${ARCHIVES[@]}"
+              exit 1
+            fi
+
+            ARCHIVE="${ARCHIVES[0]}"
+          fi
+
+          echo "Using archive: $ARCHIVE"
+
+          unzip -t "$ARCHIVE"
+
+          SOURCE_ROOT="$GITHUB_WORKSPACE/.veil-source"
+
+          rm -rf "$SOURCE_ROOT"
+          mkdir -p "$SOURCE_ROOT"
+
+          unzip -q "$ARCHIVE" -d "$SOURCE_ROOT"
+
           PROJECT_DIR=""
 
-          for candidate in \
-            "$GITHUB_WORKSPACE" \
-            "$GITHUB_WORKSPACE/veil_v13_work"
-          do
-            if [ -f "$candidate/settings.gradle.kts" ] && \
-               [ -f "$candidate/app/build.gradle.kts" ]; then
+          while IFS= read -r settings_file; do
+            candidate="$(dirname "$settings_file")"
+
+            if [ -f "$candidate/app/build.gradle.kts" ] || \
+               [ -f "$candidate/app/build.gradle" ]; then
               PROJECT_DIR="$candidate"
               break
             fi
-          done
+          done < <(
+            find "$SOURCE_ROOT" \
+              -type f \
+              \( -name settings.gradle.kts -o -name settings.gradle \)
+          )
 
           if [ -z "$PROJECT_DIR" ]; then
-            while IFS= read -r settings_file; do
-              candidate="${settings_file%/settings.gradle.kts}"
-
-              if [ -f "$candidate/app/build.gradle.kts" ]; then
-                PROJECT_DIR="$candidate"
-                break
-              fi
-            done < <(
-              find "$GITHUB_WORKSPACE" \
-                -maxdepth 5 \
-                -type f \
-                -name settings.gradle.kts \
-                -not -path '*/.git/*'
-            )
-          fi
-
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "::error::Android project not found."
-            echo "Expected settings.gradle.kts and app/build.gradle.kts."
-            find "$GITHUB_WORKSPACE" -maxdepth 4 -type f | head -200
+            echo "::error::Could not find Android Gradle project inside ZIP."
+            find "$SOURCE_ROOT" -maxdepth 5 -type f | head -200
             exit 1
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "Android project found:"
+          echo "Project detected:"
           echo "$PROJECT_DIR"
+
           ls -la "$PROJECT_DIR"
 
-      # 3. Install Java
+      # 3. Java 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
 
-      # 4. Install Android SDK
+      # 4. Android SDK
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools'
 
-      - name: Install Android SDK components
+      - name: Install Android SDK
         shell: bash
         run: |
           set -euo pipefail
 
-          sdkmanager --install \
-            "platforms;android-34" \
-            "build-tools;34.0.0"
-
           yes | sdkmanager --licenses >/dev/null || true
 
-      # 5. Install compatible Gradle
-      - name: Set up Gradle 8.7
+          sdkmanager --install \
+            "platforms;android-34" \
+            "platforms;android-35" \
+            "platforms;android-36" \
+            "build-tools;34.0.0"
+
+      # 5. Gradle
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.7"
 
-      - name: Check build environment
+      # 6. Проверка проекта
+      - name: Validate project
         shell: bash
         run: |
           set -euo pipefail
+
+          cd "$PROJECT_DIR"
+
+          test -f settings.gradle.kts -o -f settings.gradle
+          test -f build.gradle.kts -o -f build.gradle
+          test -f app/build.gradle.kts -o -f app/build.gradle
+          test -d module
+          test -f module/module.prop
+          test -f module/webroot/index.html
 
           java -version
           gradle --version
 
-          cd "$PROJECT_DIR"
+          echo "Project validation successful."
 
-          echo "Project files:"
-          ls -la
-
-          test -f settings.gradle.kts
-          test -f build.gradle.kts
-          test -f app/build.gradle.kts
-          test -d module
-
-      # 6. Validate JavaScript and shell scripts
-      - name: Validate source scripts
+      # 7. Проверка WebUI
+      - name: Validate WebUI JavaScript
         shell: bash
         run: |
           set -euo pipefail
+
           cd "$PROJECT_DIR"
 
           python3 - <<'PY'
@@ -130,10 +155,8 @@ jobs:
           import re
 
           html_path = Path("module/webroot/index.html")
-          if not html_path.is_file():
-              raise SystemExit("WebUI index.html not found")
-
           html = html_path.read_text(encoding="utf-8")
+
           scripts = re.findall(
               r"<script\b[^>]*>(.*?)</script>",
               html,
@@ -141,33 +164,44 @@ jobs:
           )
 
           if not scripts:
-              raise SystemExit("No inline JavaScript found")
+              raise SystemExit("No JavaScript blocks found")
 
-          for i, script in enumerate(scripts):
-              Path(f"/tmp/veil-{i}.mjs").write_text(
+          for index, script in enumerate(scripts):
+              Path(f"/tmp/veil-{index}.js").write_text(
                   script,
                   encoding="utf-8"
               )
 
-          print(f"Found {len(scripts)} inline JavaScript blocks")
+          print(f"Found {len(scripts)} JavaScript blocks")
           PY
 
-          for file in /tmp/veil-*.mjs; do
-            test -f "$file"
+          for file in /tmp/veil-*.js; do
             node --check "$file"
           done
 
-          for file in module/*.sh module/META-INF/com/google/android/update-binary; do
-            if [ -f "$file" ]; then
-              sh -n "$file"
-            fi
-          done
-
-      # 7. Compile Android application
-      - name: Build debug APK
+      # 8. Проверка shell-скриптов
+      - name: Validate shell scripts
         shell: bash
         run: |
           set -euo pipefail
+
+          cd "$PROJECT_DIR"
+
+          while IFS= read -r -d '' file; do
+            echo "Checking: $file"
+            bash -n "$file"
+          done < <(
+            find module -type f \
+              \( -name '*.sh' -o -name 'update-binary' \) \
+              -print0
+          )
+
+      # 9. Сборка APK
+      - name: Build Veil APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
           cd "$PROJECT_DIR"
 
           gradle :app:assembleDebug \
@@ -175,23 +209,24 @@ jobs:
             --stacktrace \
             --warning-mode all
 
-      # 8. Verify APK
+      # 10. Проверка APK
       - name: Verify APK
         shell: bash
         run: |
           set -euo pipefail
-          cd "$PROJECT_DIR"
 
-          APK="app/build/outputs/apk/debug/app-debug.apk"
+          APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
 
           if [ ! -s "$APK" ]; then
-            echo "::error::APK was not generated"
+            echo "::error::APK not found or empty"
             exit 1
           fi
 
-          ls -lh "$APK"
+          cp "$APK" "$GITHUB_WORKSPACE/Veil-debug.apk"
 
-      # 9. Package Magisk / KernelSU module
+          ls -lh "$GITHUB_WORKSPACE/Veil-debug.apk"
+
+      # 11. Упаковка Magisk / KernelSU
       - name: Package Veil module
         shell: bash
         run: |
@@ -202,13 +237,12 @@ jobs:
           mkdir -p module/system/app/DepthParallax
 
           cp \
-            app/build/outputs/apk/debug/app-debug.apk \
+            "$GITHUB_WORKSPACE/Veil-debug.apk" \
             module/system/app/DepthParallax/DepthParallax.apk
 
           cd module
 
-          zip -qr "$GITHUB_WORKSPACE/Veil-module.zip" . \
-            -x './.git/*'
+          zip -qr "$GITHUB_WORKSPACE/Veil-module.zip" .
 
           unzip -t "$GITHUB_WORKSPACE/Veil-module.zip"
 
@@ -216,13 +250,13 @@ jobs:
 
           ls -lh "$GITHUB_WORKSPACE/Veil-module.zip"
 
-      # 10. Upload APK and module ZIP
-      - name: Upload build artifacts
+      # 12. Загрузка готовых файлов
+      - name: Upload Veil artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Veil-Build
           path: |
-            **/app/build/outputs/apk/debug/app-debug.apk
+            Veil-debug.apk
             Veil-module.zip
           if-no-files-found: error
           retention-days: 14
