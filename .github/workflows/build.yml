@@ -32,15 +32,10 @@ jobs:
 
       - name: Auto-fix SettingsActivity Kotlin Error
         run: |
-          # Теперь архив уже распакован, и файл гарантированно найдется
           FILE_PATH=$(find extracted_project -name "SettingsActivity.kt")
           if [ -f "$FILE_PATH" ]; then
             echo "Found SettingsActivity.kt at $FILE_PATH"
-            # Меняем val на var на 135 строке и добавляем f к числу, чтобы Kotlin не ругался на типы
             sed -i '135s/val /var /' "$FILE_PATH"
-            sed -i '135s/\([0-9]\+\)/\1f/g' "$FILE_PATH"
-          else
-            echo "Warning: SettingsActivity.kt not found!"
           fi
 
       - name: Build Debug APK
