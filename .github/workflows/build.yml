@@ -1,14 +1,43 @@
-name: build
-on: [push, workflow_dispatch]
+
+name: MIUXHook APK Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: 17 }
-      - uses: gradle/actions/setup-gradle@v3
-        with: { gradle-version: 8.9 }
-      - run: gradle :app:assembleDebug
-      - uses: actions/upload-artifact@v4
-        with: { name: miuxhook, path: app/build/outputs/apk/debug/app-debug.apk }
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Android project
+        run: |
+          unzip -q MIUXHook-v0_5_0.zip -d .
+          test -f MIUXHook/settings.gradle.kts
+          test -f MIUXHook/app/build.gradle.kts
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.9
+
+      - name: Build APK
+        working-directory: MIUXHook
+        run: gradle :app:assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MIUXHook-APK
+          path: MIUXHook/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
