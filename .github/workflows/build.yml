@@ -1,43 +1,38 @@
-
 name: MIUXHook APK Build
-
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
+on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Extract Android project
         run: |
-          unzip -q MIUXHook-v0_5_0.zip -d .
-          test -f MIUXHook/settings.gradle.kts
-          test -f MIUXHook/app/build.gradle.kts
+          ZIP=$(ls MIUXHook-*.zip | sort -V | tail -1)
+          echo "Беру архив: $ZIP"
+          unzip -q -o "$ZIP" -d .
+          ROOT=$(dirname "$(find . -maxdepth 3 -name settings.gradle.kts | head -1)")
+          echo "Корень проекта: $ROOT"
+          echo "PROJECT_DIR=$ROOT" >> "$GITHUB_ENV"
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 8.9
+          gradle-version: 9.7.1
 
       - name: Build APK
-        working-directory: MIUXHook
-        run: gradle :app:assembleDebug
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle :app:assembleRelease --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MIUXHook-APK
-          path: MIUXHook/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          name: miuxhook
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/release/*.apk
