@@ -29,7 +29,27 @@ jobs:
 
       - name: Build APK
         working-directory: ${{ env.PROJECT_DIR }}
-        run: gradle :app:assembleRelease --stacktrace
+        run: |
+          set -o pipefail
+          gradle :app:assembleRelease --console=plain 2>&1 | tee build.log
+
+      - name: Show errors (only on failure)
+        if: failure()
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          {
+            echo '## Ошибки сборки'
+            echo '```'
+            grep -E '^e: |^e: file|error:|What went wrong|Could not|Unresolved|FAILED' build.log | sort -u | head -60
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload full log (only on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: ${{ env.PROJECT_DIR }}/build.log
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
