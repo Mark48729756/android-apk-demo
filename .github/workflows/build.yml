@@ -14,6 +14,11 @@ jobs:
         with: { distribution: temurin, java-version: 17 }
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: 8.14.3 }
+      - name: Unzip project if needed
+        run: |
+          if ! find . -maxdepth 3 \( -name settings.gradle.kts -o -name settings.gradle \) -not -path './.git/*' | grep -q .; then
+            for z in *.zip; do [ -f "$z" ] && unzip -o -q "$z" -d unpacked; done
+          fi
       - name: Find Gradle project root
         run: |
           S=$(find . -maxdepth 3 \( -name settings.gradle.kts -o -name settings.gradle \) -not -path './.git/*' | head -n1)
